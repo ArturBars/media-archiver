@@ -30,8 +30,8 @@ def archive(link: str = Body(..., embed=True)):
 
     response = requests.get(link)
 
-    if response.status_code != 200:
-        return HTTP_400_BAD_REQUEST
+    if response.status_code not in (200,):
+        return Response(response.content, status_code=response.status_code)
 
     if not os.path.exists(os.path.dirname(file_path)):
         try:
