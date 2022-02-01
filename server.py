@@ -1,4 +1,5 @@
 import errno
+import logging
 import os
 
 import requests
@@ -8,6 +9,30 @@ from starlette.responses import FileResponse, Response
 from starlette.status import HTTP_400_BAD_REQUEST
 
 from utils import file_from_link, preload_media
+
+
+def check_dir(path):
+    """Check dir. Create if not exists."""
+    if not os.path.isdir(path):
+        os.makedirs(path)
+        return True
+    return False
+
+
+check_dir('logs')
+
+fileHandler = logging.FileHandler('logs/info.log')
+consoleHandler = logging.StreamHandler()
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+    handlers=[
+        fileHandler,
+        consoleHandler
+    ]
+)
+logger = logging.getLogger()
 
 app = FastAPI()
 
@@ -19,11 +44,11 @@ def preload(request: Request, file: UploadFile = None,
         return Response('Source file or link not passed.',
                         status_code=HTTP_400_BAD_REQUEST)
 
-    response = preload_media(source or file, link)
-    if not response:
-        return Response('Cannot read source.',
+    response, errors = preload_media(source or file, link)
+    if errors:
+        return Response(f'Cannot read source. Reason: {errors}',
                         status_code=HTTP_400_BAD_REQUEST)
-
+    logger.info(f'Link {link} archived.')
     return Response(request.url_for('get') + f'?link={link}')
 
 
@@ -34,6 +59,7 @@ def archive(request: Request, link: str = Body(..., embed=True)):
     response = requests.get(link)
 
     if response.status_code not in (200,):
+        logger.info(f'Link {link} no archived. Reason: {response.content}')
         return Response(response.content, status_code=response.status_code)
 
     if not os.path.exists(os.path.dirname(file_path)):
@@ -45,7 +71,7 @@ def archive(request: Request, link: str = Body(..., embed=True)):
 
     with open(file_path, 'wb') as file:
         file.write(response.content)
-
+    logger.info(f'Link {link} archived.')
     return Response(request.url_for('get') + f'?link={link}')
 
 
@@ -55,5 +81,5 @@ def get(link: str):
 
     if not file_path.exists():
         raise HTTPException(status_code=404)
-
+    logger.info(f'Link {link} requested.')
     return FileResponse(file_path)

@@ -39,7 +39,7 @@ def preload_media(source, link: str):
         response = requests.get(source)
 
         if response.status_code not in (200,):
-            return None
+            return None, response.content
 
         with open(file_path, 'wb') as file:
             file.write(response.content)
@@ -52,5 +52,5 @@ def preload_media(source, link: str):
     elif os.path.exists(os.path.dirname(source)):
         shutil.copy2(source, file_path)
     else:
-        return None
-    return file_path
+        return None, f'Not supported source type <{type(source)}>'
+    return file_path, None
