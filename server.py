@@ -1,31 +1,34 @@
 import errno
-import hashlib
 import os
-from pathlib import Path
-from urllib.parse import urlparse
 
 import requests
-from fastapi import FastAPI, Body, HTTPException
+from fastapi import FastAPI, Body, HTTPException, UploadFile, Form
+from starlette.requests import Request
 from starlette.responses import FileResponse, Response
-from starlette.status import HTTP_201_CREATED, HTTP_400_BAD_REQUEST
+from starlette.status import HTTP_400_BAD_REQUEST
+
+from utils import file_from_link, preload_media
 
 app = FastAPI()
 
-BASE_DIR = Path(__file__).resolve().parent
 
-MEDIA_ROOT = BASE_DIR / 'static'
+@app.post('/preload')
+def preload(request: Request, file: UploadFile = None,
+            source: str = Form(None), link: str = Form(...)):
+    if not (source or file):
+        return Response('Source file or link not passed.',
+                        status_code=HTTP_400_BAD_REQUEST)
 
+    response = preload_media(source or file, link)
+    if not response:
+        return Response('Cannot read source.',
+                        status_code=HTTP_400_BAD_REQUEST)
 
-def file_from_link(link):
-    hashed_link = hashlib.md5(link.encode()).hexdigest()
-    file_ext = urlparse(link).path.split('.')[-1]
-    file_name = f'{hashed_link}.{file_ext}'
-    file_system_path = MEDIA_ROOT.joinpath(file_name)
-    return file_system_path
+    return Response(request.url_for('get') + f'?link={link}')
 
 
 @app.post('/archive')
-def archive(link: str = Body(..., embed=True)):
+def archive(request: Request, link: str = Body(..., embed=True)):
     file_path = file_from_link(link)
 
     response = requests.get(link)
@@ -43,7 +46,7 @@ def archive(link: str = Body(..., embed=True)):
     with open(file_path, 'wb') as file:
         file.write(response.content)
 
-    return Response(status_code=HTTP_201_CREATED)
+    return Response(request.url_for('get') + f'?link={link}')
 
 
 @app.get('/get')
