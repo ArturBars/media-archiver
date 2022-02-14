@@ -2,16 +2,18 @@ import errno
 import hashlib
 import os
 import shutil
+from pathlib import Path
 from urllib.parse import urlparse
 
 import requests
+from PIL import Image
 
 from settings import MEDIA_ROOT
 
 
 def file_from_link(link):
     hashed_link = hashlib.md5(link.encode()).hexdigest()
-    file_ext = urlparse(link).path.split('.')[-1]
+    file_ext = urlparse(link).path.rsplit('.')[-1]
     file_name = f'{hashed_link}.{file_ext}'
     file_system_path = MEDIA_ROOT.joinpath(file_name)
     return file_system_path
@@ -54,3 +56,39 @@ def preload_media(source, link: str):
     else:
         return None, f'Not supported source type <{type(source)}>'
     return file_path, None
+
+
+IMAGE_SIZES = {'small': (80, 80), 'medium': (360, 360)}
+
+
+def compress_image(image_path):
+    path, media_type = image_path.rsplit('.', 1)
+    hashed_path = f'{hashlib.md5(image_path.encode()).hexdigest()}.{media_type}'
+    hashed_path = MEDIA_ROOT.joinpath(hashed_path)
+    if not Path(hashed_path).exists():
+        return
+
+    image = Image.open(hashed_path)
+    width, height = image.size
+
+    for size_type, size in IMAGE_SIZES.items():
+        new_width, new_height = width, height
+
+        if width > height:
+            new_width = height
+        else:
+            new_height = width
+
+        left = (width - new_width) / 2
+        top = (height - new_height) / 2
+        right = (width + new_width) / 2
+        bottom = (height + new_height) / 2
+
+        thumbnail = image.crop((left, top, right, bottom))
+        thumbnail = thumbnail.resize(size, Image.ANTIALIAS)
+
+        thumbnail_name = path + '_' + size_type + '.' + media_type
+        hashed_path = hashlib.md5(thumbnail_name.encode()).hexdigest()
+        thumbnail_path = hashed_path + '.' + media_type
+        thumbnail_path = MEDIA_ROOT.joinpath(thumbnail_path)
+        thumbnail.save(thumbnail_path, optimize=True, quality=96)

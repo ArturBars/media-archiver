@@ -8,7 +8,7 @@ from starlette.requests import Request
 from starlette.responses import FileResponse, Response
 from starlette.status import HTTP_400_BAD_REQUEST
 
-from utils import file_from_link, preload_media
+from utils import file_from_link, preload_media, compress_image, IMAGE_SIZES
 
 
 def check_dir(path):
@@ -80,6 +80,17 @@ def get(link: str):
     file_path = file_from_link(link)
 
     if not file_path.exists():
-        raise HTTPException(status_code=404)
+        file_name, media_type = link.rsplit('.', 1)
+
+        for size in IMAGE_SIZES:
+            original_path = file_name[:-len(f'_{size}')] + '.' + media_type
+
+            if file_name.endswith(f'_{size}'):
+                compress_image(original_path)
+                break
+
+        if not file_path.exists():
+            raise HTTPException(status_code=404)
+
     logger.info(f'Link {link} requested.')
     return FileResponse(file_path)
